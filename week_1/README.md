@@ -2,7 +2,7 @@
 
 ## Project Description
 
-This project builds a ETL (Extract, Transform, Load) pipeline for job listing data. It extracts raw `.mhtml` files, converts them into `.html`, processes the HTML into structured `.json`, loads the cleaned data into a SQLite database, and runs a data quality report.
+This project builds an ETL (Extract, Transform, Load) pipeline for job listing data. It extracts raw `.mhtml` files, converts them into `.html`, processes the HTML into structured `.json`, loads the cleaned data into a SQLite database, and runs a data quality report.
 
 Final output:
 
@@ -179,7 +179,7 @@ Expected output format:
    ↳ source_id: <SOURCE_ID> | job_title: <JOB_TITLE>
 📌 Longest Description: <number> chars
    ↳ source_id: <SOURCE_ID> | job_title: <JOB_TITLE>
-
+```
 
 Run the full pipeline:
 
@@ -192,18 +192,6 @@ Full sequence:
 ```text
 ingest -> process -> load -> profile
 ```
-
----
-
-## Command Summary
-
-| Command | Purpose |
-|---|---|
-| `uv run python main.py ingest` | Extract `.mhtml` into `.html` |
-| `uv run python main.py process` | Process `.html` into `.json` |
-| `uv run python main.py load` | Load `.json` into SQLite |
-| `uv run python main.py profile` | Run data quality checks |
-| `uv run python main.py all` | Run the full pipeline |
 
 ---
 
