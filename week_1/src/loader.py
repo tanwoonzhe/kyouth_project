@@ -67,7 +67,7 @@ def load_single_json(
     return "inserted"
 
 
-def load_all_json(input_dir: Path, output_dir: Path) -> None:
+def load_all_jsons(input_dir: Path, output_dir: Path) -> None:
     input_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
 

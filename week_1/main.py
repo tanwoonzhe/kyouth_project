@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 
 from src.ingestor import ingest_all_mhtml
-from src.loader import load_all_json
+from src.loader import load_all_jsons
 from src.processor import process_all_html
 from src.profiler import run_data_profile
 
@@ -26,7 +26,7 @@ def run_silver() -> None:
 
 def run_gold() -> None:
     print("🏆 Gold...")
-    load_all_json(SILVER_DIR, GOLD_DIR)
+    load_all_jsons(SILVER_DIR, GOLD_DIR)
 
 
 def run_profile() -> None:
