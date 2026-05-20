@@ -8,7 +8,7 @@ from pathlib import Path
 from fastmcp import Client as MCPClient
 
 from mcp_server import mcp as _jobs_db_mcp
-from prompt_model import prompt_model
+from prompt_model import prompt_model_full
 
 
 # Primary model used for tagging; falls back to FALLBACK_MODEL if it fails
@@ -36,7 +36,7 @@ def _parse_tool_result(result):
         return text
 
 
-async def _tag_data_async(db_url: str) -> None:
+async def _tag_data_async(db_url: str) -> tuple[int, float]:
     """
     Async core of tag_data — all DB operations go through the in-process
     FastMCP server (mcp_server.py) instead of calling sqlite3 directly.
@@ -45,7 +45,7 @@ async def _tag_data_async(db_url: str) -> None:
 
     if not db_path.exists():
         print(f"Database not found: {db_path}")
-        return
+        return 0, 0.0
 
     # Open one persistent in-process MCP connection for the entire tagging session
     async with MCPClient(_jobs_db_mcp) as db:
@@ -58,7 +58,7 @@ async def _tag_data_async(db_url: str) -> None:
 
         if not rows:
             print("No rows to tag.")
-            return
+            return 0, 0.0
 
         # BONUS: Track total token usage across all LLM calls
         total_tokens = 0
@@ -91,35 +91,35 @@ async def _tag_data_async(db_url: str) -> None:
             )
 
             print(
-                f"[Batch {index}] source_id={source_id}, "
+                f"[Batch {index}] tokens={total_tokens} | source_id={source_id}, "
                 f"job_title={job_title}, skills={skills}"
             )
 
-            # BONUS — Time optimisation: unconditional sleep removed.
-            # Before: 3 s × N rows (e.g. 84 rows → 252 s of idle waiting regardless of load).
-            # After:  sleep only when the API returns a rate-limit error (inside extract_skills_with_retry).
-            # Impact: on a run with zero rate-limit hits, ~252 s are saved — well above the 5 % threshold.
-
+           
         elapsed = time.time() - start_time
         # BONUS: Print token and time summary after all rows are processed
-        print(f"Total tokens used: {total_tokens}")
+        print(f"Total tokens used (input + output): {total_tokens}")
         print(f"Total time used: {elapsed:.2f}s")
+        return total_tokens, elapsed
 
 
-def tag_data(db_url: str) -> None:
+def tag_data(db_url: str) -> tuple[int, float]:
     """
     Read job descriptions from a SQLite database (via MCP), extract technical
     skills using an LLM, and write the results back through MCP.
 
     Args:
         db_url: Path to the SQLite database.
+
+    Returns:
+        A tuple of (total_tokens, elapsed_seconds) where total_tokens is the
+        combined input + output token count reported by the Gemini API.
     """
     # BONUS (MCP): All DB operations are routed through the FastMCP server in mcp_server.py
-    asyncio.run(_tag_data_async(db_url))
+    return asyncio.run(_tag_data_async(db_url))
 
 
 def build_prompt(job_title: str, description: str) -> str:
-    # BONUS: Truncate description to 3000 chars to reduce token usage
     # Most relevant skills are mentioned early in a job post
     description = description[:3000]
 
@@ -149,16 +149,18 @@ Answer:
 
 
 def extract_skills_with_retry(prompt: str) -> tuple[str, int]:
-    # Start token count with an estimate of the prompt itself
-    token_estimate = estimate_tokens(prompt)
+    # Accumulate real token counts returned by the Gemini API (input + output).
+    # estimate_tokens() is only used as a fallback when the API returns 0 (error path).
+    total_tokens = 0
 
     for attempt in range(1, MAX_RETRIES + 1):
-        response = prompt_model(DEFAULT_MODEL, prompt)
-        token_estimate += estimate_tokens(response)
+        result = prompt_model_full(DEFAULT_MODEL, prompt)
+        # Use actual token count from API; fall back to character estimate if unavailable
+        total_tokens += result.tokens if result.tokens else estimate_tokens(prompt) + estimate_tokens(result.text)
 
         # If the API returns a rate-limit error, wait and retry
-        if is_rate_limit_error(response):
-            delay = get_retry_delay(response)
+        if is_rate_limit_error(result.text):
+            delay = get_retry_delay(result.text)
             print(
                 f"{DEFAULT_MODEL} rate limit reached. "
                 f"Waiting {delay}s before retry {attempt}/{MAX_RETRIES}..."
@@ -167,10 +169,10 @@ def extract_skills_with_retry(prompt: str) -> tuple[str, int]:
             continue
 
         # Clean and validate the response; empty string means the LLM gave bad output
-        skills = clean_skills(response)
+        skills = clean_skills(result.text)
 
         if skills:
-            return skills, token_estimate
+            return skills, total_tokens
 
         print(f"Attempt {attempt} failed with {DEFAULT_MODEL}. Retrying...")
         time.sleep(SLEEP_SECONDS)
@@ -178,12 +180,12 @@ def extract_skills_with_retry(prompt: str) -> tuple[str, int]:
     # After all retries, switch to the fallback model for one final attempt
     print(f"{DEFAULT_MODEL} failed. Falling back to {FALLBACK_MODEL}...")
 
-    response = prompt_model(FALLBACK_MODEL, prompt)
-    token_estimate += estimate_tokens(response)
+    result = prompt_model_full(FALLBACK_MODEL, prompt)
+    total_tokens += result.tokens if result.tokens else estimate_tokens(prompt) + estimate_tokens(result.text)
 
-    skills = clean_skills(response)
+    skills = clean_skills(result.text)
 
-    return skills, token_estimate
+    return skills, total_tokens
 
 
 def clean_skills(response: str) -> str:
@@ -255,7 +257,7 @@ def clean_skills(response: str) -> str:
 
 
 def estimate_tokens(text: str) -> int:
-    # BONUS: Rough token estimate — ~4 characters per token (OpenAI convention)
+
     if not text:
         return 0
 

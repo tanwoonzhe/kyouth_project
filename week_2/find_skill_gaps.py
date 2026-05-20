@@ -23,11 +23,11 @@ SLEEP_SECONDS = 7
 # BONUS: Regex patterns to detect prompt injection attacks in user-supplied resume text
 # A malicious user could try to overwrite the LLM's instructions via the resume file
 _INJECTION_PATTERNS = [
-    r"ignore\s+(previous|above|all)\s+instructions",
+    r"ignore\s+(?:(?:previous|above|all|your)\s+)+instructions",
     r"you\s+are\s+now\b",
     r"new\s+(role|persona|instructions)",
-    r"disregard\s+(your|the)\s+(previous|above)",
-    r"act\s+as\s+(if|a)\b",
+    r"disregard\s+(?:your|the)\s+(?:previous|above)",
+    r"act\s+as\s+(?:if|a)\b",
 ]
 
 
@@ -125,7 +125,6 @@ def extract_resume_skills(resume_text: str) -> tuple[set[str], int]:
 
 
 def build_resume_prompt(resume_text: str) -> str:
-    # BONUS: Truncate resume to 4000 chars to reduce token usage while keeping key content
     resume_text = resume_text[:4000]
     return (
         "Extract technical skills (languages, frameworks, tools, cloud platforms, databases) "
@@ -360,7 +359,7 @@ def main() -> None:
     result = find_skill_gaps(input_file_path, db_url)
 
     # Print both the Pydantic repr and a pretty-printed JSON dump
-    print(result)
+    # print(result)
     print(json.dumps(result.model_dump(), indent=2))
 
 

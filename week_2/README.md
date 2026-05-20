@@ -241,35 +241,10 @@ Expected behaviour: the script prints `Warning: Potential prompt injection detec
 
 ---
 
-## Architecture Reflection
+### Architecture Reflection
 
-### Design choices
+For this project, I structured the system into separate modules so that each part has its own responsibility. I also added several error-handling steps to prevent the program from crashing easily. Besides that, I used MCP as a separate layer to read the SQLite database. This makes the database access more independent, so if I change files such as `tag_data.py` later, it will not directly affect how the database is read.
 
-**MCP server for database access**: Instead of embedding `sqlite3` calls directly in every script, all database reads and writes go through `mcp_server.py`. This enforces separation of concerns — the business logic scripts (`tag_data.py`, `find_skill_gaps.py`) have zero knowledge of the database schema. Swapping SQLite for PostgreSQL in future requires changes only in `mcp_server.py`.
+One trade-off I made was using simpler coding instead of trying to achieve the highest possible accuracy. For example, the `normalise_skill()` function, injection patterns, and banned words mainly depend on matching rules. This makes the code easier to understand and maintain, but the result may not always be perfect. I also had to reduce the resume text length before sending it to the model so that the token count and waiting time would be lower. However, this may reduce accuracy because the prompt does not contain the full resume content.
 
-**In-process MCP client**: Rather than spawning a subprocess for every DB call, both scripts import the `mcp` FastMCP instance directly and connect via FastMCP's in-memory transport. This avoids inter-process communication overhead while still demonstrating the full MCP abstraction layer.
-
-**Pydantic for output validation**: `SkillGapResult` enforces typed, validated output from `find_skill_gaps`. Downstream Week 3 code can consume it without additional validation.
-
-**`temperature=0.0` for determinism**: The gap-finding function is required to produce consistent results across runs. Zero temperature achieves this without any post-processing heuristics. `tag_data.py` does not require determinism, so a default temperature is used there.
-
-**Unconditional sleep removed** (BONUS — time optimisation): The original `tag_data.py` called `time.sleep(3)` after *every* row regardless of API load. With 84 rows this adds 252 s of idle overhead. After the fix, sleep only occurs inside `extract_skills_with_retry` when the API explicitly returns a rate-limit error. On a run with zero rate-limit hits, ~252 s are saved — well above the required 5 % threshold.
-
-**Prompt truncation** (BONUS — token optimisation): Job descriptions are capped at 3 000 characters and resumes at 4 000 characters. Skills are typically listed in the first portion of any document, so relevant information is preserved while token usage is consistently reduced.
-
-### Trade-offs
-
-| Decision | Benefit | Cost |
-|---|---|---|
-| One LLM call per job | Simple, rate-limit-safe | Slow for large databases |
-| Static alias table | Predictable, fast | Requires manual updates for new variants |
-| `temperature=0` | Deterministic gaps | May miss edge-case skills a higher temperature would surface |
-| In-process MCP | No subprocess overhead | Tight coupling between scripts and `mcp_server.py` import |
-
-### Improvements
-
-- **Batch tagging**: Group 3–5 jobs per LLM call to reduce API round-trips and total tagging time.
-- **Async LLM calls**: Use `asyncio` + `httpx` to fire concurrent Gemini requests (up to the RPM limit) and speed up tagging.
-- **Embedding-based normalisation**: Replace the static alias table with cosine similarity over skill embeddings to generalise to unseen variants.
-- **Resume skill caching**: Cache the extracted skill set per resume hash to avoid repeated LLM calls for the same file.
-- **External MCP mode**: Deploy `mcp_server.py` as a standalone HTTP/stdio service for production use where the database is on a separate machine.
+If I had more time, I would look for useful extensions or related open-source tools to improve the system. I would also study more bonus parts, such as better prompt optimization techniques or algorithms to reduce time usage. Another improvement I would consider is improving batch tagging, so that each batch can process more jobs at once and complete the tagging process faster.
