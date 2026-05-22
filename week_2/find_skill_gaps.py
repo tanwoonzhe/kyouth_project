@@ -7,6 +7,7 @@ from collections import Counter
 from pathlib import Path
 
 from fastmcp import Client as MCPClient
+from fastmcp.exceptions import ToolError
 from pydantic import BaseModel
 
 from mcp_server import mcp as _jobs_db_mcp
@@ -17,8 +18,33 @@ from prompt_model import prompt_model_full
 DEFAULT_MODEL = "gemini-2.5-flash-lite"
 FALLBACK_MODEL = "gemini-2.5-flash"
 MAX_RETRIES = 3
-# Longer sleep than tag_data because resume extraction is rarer and quality matters more
-SLEEP_SECONDS = 7
+# Rate limits file path (relative to this file)
+RATE_LIMITS_FILE = Path(__file__).parent / "rate_limits.txt"
+
+
+def load_rate_limits() -> dict[str, int]:
+    """Parse rate_limits.txt into {model_name: requests_per_minute}."""
+    limits: dict[str, int] = {}
+    try:
+        with open(RATE_LIMITS_FILE) as f:
+            for line in f:
+                parts = line.strip().split()
+                if len(parts) >= 2:
+                    model, rpm_str = parts[0], parts[1]
+                    try:
+                        limits[model] = int(rpm_str)
+                    except ValueError:
+                        pass
+    except FileNotFoundError:
+        pass
+    return limits
+
+
+def get_sleep_seconds(model: str) -> int:
+    """Return seconds to wait between calls = 60 / RPM from rate_limits.txt."""
+    limits = load_rate_limits()
+    rpm = limits.get(model, 5)  # default to 5 RPM if model not in file
+    return max(1, 60 // rpm)
 
 # BONUS: Regex patterns to detect prompt injection attacks in user-supplied resume text
 # A malicious user could try to overwrite the LLM's instructions via the resume file
@@ -192,7 +218,7 @@ def call_model_with_retry(prompt: str) -> tuple[str, int]:
             return cleaned, total_tokens
 
         print(f"Attempt {attempt} failed. Retrying...")
-        time.sleep(SLEEP_SECONDS)
+        time.sleep(get_sleep_seconds(DEFAULT_MODEL))
 
     # Switch to a stronger model as a last resort
     print(f"{DEFAULT_MODEL} failed. Falling back to {FALLBACK_MODEL}...")
@@ -357,10 +383,15 @@ def main() -> None:
         input_file_path = sys.argv[1]
         db_url = sys.argv[2]
 
-    result = find_skill_gaps(input_file_path, db_url)
+    try:
+        result = find_skill_gaps(input_file_path, db_url)
+    except FileNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except ToolError as e:
+        print(f"Database error: {e}", file=sys.stderr)
+        sys.exit(1)
 
-    # Print both the Pydantic repr and a pretty-printed JSON dump
-    # print(result)
     print(json.dumps(result.model_dump(), indent=2))
 
 
