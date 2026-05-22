@@ -48,8 +48,7 @@ def get_untagged_jobs(db_path: str) -> list[dict]:
             """
         ).fetchall()
         return [
-            {"source_id": r[0], "job_title": r[1], "description": r[2]}
-            for r in rows
+            {"source_id": r[0], "job_title": r[1], "description": r[2]} for r in rows
         ]
     finally:
         conn.close()

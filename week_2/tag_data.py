@@ -32,7 +32,7 @@ def _parse_tool_result(result):
         return None
     try:
         return json.loads(text)
-    except (json.JSONDecodeError, ValueError):
+    except json.JSONDecodeError, ValueError:
         return text
 
 
@@ -95,7 +95,6 @@ async def _tag_data_async(db_url: str) -> tuple[int, float]:
                 f"job_title={job_title}, skills={skills}"
             )
 
-           
         elapsed = time.time() - start_time
         # BONUS: Print token and time summary after all rows are processed
         print(f"Total tokens used (input + output): {total_tokens}")
@@ -156,7 +155,11 @@ def extract_skills_with_retry(prompt: str) -> tuple[str, int]:
     for attempt in range(1, MAX_RETRIES + 1):
         result = prompt_model_full(DEFAULT_MODEL, prompt)
         # Use actual token count from API; fall back to character estimate if unavailable
-        total_tokens += result.tokens if result.tokens else estimate_tokens(prompt) + estimate_tokens(result.text)
+        total_tokens += (
+            result.tokens
+            if result.tokens
+            else estimate_tokens(prompt) + estimate_tokens(result.text)
+        )
 
         # If the API returns a rate-limit error, wait and retry
         if is_rate_limit_error(result.text):
@@ -181,7 +184,11 @@ def extract_skills_with_retry(prompt: str) -> tuple[str, int]:
     print(f"{DEFAULT_MODEL} failed. Falling back to {FALLBACK_MODEL}...")
 
     result = prompt_model_full(FALLBACK_MODEL, prompt)
-    total_tokens += result.tokens if result.tokens else estimate_tokens(prompt) + estimate_tokens(result.text)
+    total_tokens += (
+        result.tokens
+        if result.tokens
+        else estimate_tokens(prompt) + estimate_tokens(result.text)
+    )
 
     skills = clean_skills(result.text)
 
@@ -263,6 +270,7 @@ def estimate_tokens(text: str) -> int:
 
     return max(1, len(text) // 4)
 
+
 def get_retry_delay(response: str) -> int:
     # Try to parse the retryDelay seconds from the API error message
     match = re.search(r"'retryDelay': '(\d+)s'", response)
@@ -277,6 +285,7 @@ def get_retry_delay(response: str) -> int:
 
     # Default to 60 seconds if we cannot parse the suggested delay
     return 60
+
 
 def is_rate_limit_error(response: str) -> bool:
     if not response:

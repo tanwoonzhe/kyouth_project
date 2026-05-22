@@ -127,7 +127,8 @@ def extract_resume_skills(resume_text: str) -> tuple[set[str], int]:
 def build_resume_prompt(resume_text: str) -> str:
     resume_text = resume_text[:4000]
     return (
-        "Extract technical skills (languages, frameworks, tools, cloud platforms, databases) "
+        "Extract technical skills (languages, frameworks, tools, cloud platforms, databases, "
+        "testing methodologies, analytical techniques) "
         "from this resume. Return comma-separated lowercase values only. "
         "No explanations, no soft skills, no certifications. Return None if none found.\n\n"
         f"Resume:\n{resume_text}\n\nAnswer:"
