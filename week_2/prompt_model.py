@@ -47,7 +47,7 @@ def prompt_model_full(
 
         # Fallback: call Ollama for local models
         text = _prompt_ollama(model, prompt)
-        # Ollama does not return token counts, so we estimate from word count
+        # We estimate Ollama token counts from word count
         estimated = len(prompt.split()) + len(text.split())
         return ModelResponse(text=text, tokens=estimated)
 
