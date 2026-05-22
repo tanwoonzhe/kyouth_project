@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 from fastmcp import Client as MCPClient
+from fastmcp.exceptions import ToolError
 
 from mcp_server import mcp as _jobs_db_mcp
 from prompt_model import prompt_model_full
@@ -18,6 +19,32 @@ FALLBACK_MODEL = "gemini-2.5-flash-lite"
 MAX_RETRIES = 3
 # Seconds to wait between retries to avoid hitting rate limits back-to-back
 SLEEP_SECONDS = 3
+# Rate limits file path (relative to this file)
+RATE_LIMITS_FILE = Path(__file__).parent / "rate_limits.txt"
+
+
+def load_rate_limits() -> dict[str, int]:
+    """Parse rate_limits.txt into {model_name: requests_per_minute}."""
+    limits: dict[str, int] = {}
+    try:
+        with open(RATE_LIMITS_FILE) as f:
+            for line in f:
+                parts = line.strip().split()
+                if len(parts) >= 2:
+                    model, rpm_str = parts[0], parts[1]
+                    try:
+                        limits[model] = int(rpm_str)
+                    except ValueError:
+                        pass
+    except FileNotFoundError:
+        pass
+    return limits
+
+
+def get_batch_size(model: str) -> int:
+    """Return batch size = RPM from rate_limits.txt for the given model."""
+    limits = load_rate_limits()
+    return limits.get(model, 5)
 
 
 def _parse_tool_result(result):
@@ -49,54 +76,73 @@ async def _tag_data_async(db_url: str) -> tuple[int, float]:
 
     # Open one persistent in-process MCP connection for the entire tagging session
     async with MCPClient(_jobs_db_mcp) as db:
-        # Idempotent schema migration via MCP tool
-        await db.call_tool("ensure_tech_stack_column", {"db_path": db_url})
+        # Idempotent schema migration; catches missing table / permission errors
+        try:
+            await db.call_tool("ensure_tech_stack_column", {"db_path": db_url})
+            raw = await db.call_tool("get_untagged_jobs", {"db_path": db_url})
+        except ToolError as e:
+            print(f"Database error: {e}")
+            return 0, 0.0
 
-        # Retrieve only untagged rows so the script is safe to re-run
-        raw = await db.call_tool("get_untagged_jobs", {"db_path": db_url})
         rows = _parse_tool_result(raw) or []
 
         if not rows:
             print("No rows to tag.")
             return 0, 0.0
 
-        # BONUS: Track total token usage across all LLM calls
+        # Batch size is derived from the RPM for DEFAULT_MODEL in rate_limits.txt
+        batch_size = get_batch_size(DEFAULT_MODEL)
+
         total_tokens = 0
         start_time = time.time()
 
-        for index, row in enumerate(rows, start=1):
-            source_id = row["source_id"]
-            job_title = row["job_title"]
-            description = row["description"]
+        for batch_start in range(0, len(rows), batch_size):
+            batch = rows[batch_start : batch_start + batch_size]
+            batch_num = batch_start // batch_size + 1
 
-            # Build a focused prompt using job title and description
-            prompt = build_prompt(job_title, description)
-            # Call the LLM with retry logic; returns cleaned skill string + token count
-            skills, token_estimate = extract_skills_with_retry(prompt)
+            for row in batch:
+                source_id = row["source_id"]
+                job_title = row["job_title"]
+                description = row["description"]
 
-            total_tokens += token_estimate
+                # Build a focused prompt using job title and description
+                prompt = build_prompt(job_title, description)
+                # Call the LLM with retry logic; returns cleaned skill string + token count
+                skills, token_estimate = extract_skills_with_retry(prompt)
 
-            if not skills:
+                total_tokens += token_estimate
+
+                if not skills:
+                    print(
+                        f"[Batch {batch_num}] failed: source_id={source_id}, "
+                        "no valid skills returned"
+                    )
+                    continue
+
+                # Persist via MCP — no direct sqlite3 call in this file
+                try:
+                    await db.call_tool(
+                        "update_tech_stack",
+                        {"db_path": db_url, "source_id": source_id, "skills": skills},
+                    )
+                except ToolError as e:
+                    print(f"[Batch {batch_num}] write error for source_id={source_id}: {e}")
+                    continue
+
                 print(
-                    f"[Batch {index}] failed: source_id={source_id}, "
-                    "no valid skills returned"
+                    f"[Batch {batch_num}] tokens={total_tokens} | source_id={source_id}, "
+                    f"job_title={job_title}, skills={skills}"
                 )
-                continue
 
-            # Persist via MCP — no direct sqlite3 call in this file
-            # Each row is committed immediately inside the MCP tool to preserve progress
-            await db.call_tool(
-                "update_tech_stack",
-                {"db_path": db_url, "source_id": source_id, "skills": skills},
-            )
-
-            print(
-                f"[Batch {index}] tokens={total_tokens} | source_id={source_id}, "
-                f"job_title={job_title}, skills={skills}"
-            )
+            # Sleep 60 s between batches to stay within the RPM window
+            if batch_start + batch_size < len(rows):
+                print(
+                    f"Batch {batch_num} complete ({len(batch)} rows). "
+                    f"Sleeping 60s to respect rate limits..."
+                )
+                time.sleep(60)
 
         elapsed = time.time() - start_time
-        # BONUS: Print token and time summary after all rows are processed
         print(f"Total tokens used (input + output): {total_tokens}")
         print(f"Total time used: {elapsed:.2f}s")
         return total_tokens, elapsed
