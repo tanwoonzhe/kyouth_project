@@ -32,7 +32,7 @@ def _parse_tool_result(result):
         return None
     try:
         return json.loads(text)
-    except json.JSONDecodeError, ValueError:
+    except (json.JSONDecodeError, ValueError):
         return text
 
 
