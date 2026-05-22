@@ -112,19 +112,18 @@ FastMCP server instance (`mcp = FastMCP("jobs-db")`) exposing four tools. Import
 | Function | Inputs | Outputs | Notes |
 |---|---|---|---|
 | `prompt_model(model, prompt, temperature)` | `str, str, float=0.5` | `str` | Text only |
-| `prompt_model_full(model, prompt, temperature)` | `str, str, float=0.5` | `ModelResponse(text, tokens)` | BONUS: includes token count |
-
+| `prompt_model_full(model, prompt, temperature)` | `str, str, float=0.5` | `ModelResponse(text, tokens)` | Includes real token count from API |
 Models in `GEMINI_MODELS` route to the Google Gemini API; all others call local Ollama.
 
 ### `tag_data.py` — Job Skill Tagger
 
 | Function | Inputs | Outputs | Notes |
 |---|---|---|---|
-| `tag_data(db_url)` | `str` | `None` | Main entry point; calls `asyncio.run(_tag_data_async)` |
-| `build_prompt(job_title, description)` | `str, str` | `str` | BONUS: truncates description to 3 000 chars |
+| `tag_data(db_url)` | `str` | `tuple[int, float]` | Main entry point; returns `(total_tokens, elapsed_seconds)` |
+| `build_prompt(job_title, description)` | `str, str` | `str` | Truncates description to 3 000 chars to reduce token usage |
 | `extract_skills_with_retry(prompt)` | `str` | `tuple[str, int]` | 3 retries on DEFAULT_MODEL then fallback |
 | `clean_skills(response)` | `str` | `str` | Normalises LLM output to comma-separated skills |
-| `estimate_tokens(text)` | `str` | `int` | BONUS: ~4 chars/token estimate |
+| `estimate_tokens(text)` | `str` | `int` | Fallback token estimate (~4 chars/token) when API returns 0 |
 
 ### `find_skill_gaps.py` — Gap Detector
 
@@ -132,11 +131,10 @@ Models in `GEMINI_MODELS` route to the Google Gemini API; all others call local 
 |---|---|---|---|
 | `find_skill_gaps(input_file_path, db_url)` | `str, str` | `SkillGapResult` | Main entry point |
 | `extract_resume_skills(resume_text)` | `str` | `tuple[set[str], int]` | `temperature=0.0` for determinism |
-| `read_market_skills(db_path)` | `Path` | `list[str]` | BONUS (MCP): routes through FastMCP server |
-| `calculate_gaps(resume_skills, market_skills)` | `set, list` | `list[str]` | Sorted set difference |
-| `calculate_stats(resume_skills, market_skills)` | `set, list` | `dict[str, int]` | BONUS: demand count per gap skill |
+| `read_market_skills(db_path)` | `Path` | `list[str]` | Routes through FastMCP server (MCP) |
+| `calculate_stats(resume_skills, market_skills)` | `set, list` | `dict[str, int]` | Demand count per gap skill, sorted by frequency |
 | `normalise_skill(skill)` | `str` | `str` | Alias mapping (js→javascript, c/c++→c++, etc.) |
-| `_is_injection(text)` / `_sanitize(text)` | `str` | `bool` / `str` | BONUS: jailbreak prevention |
+| `_is_injection(text)` / `_sanitize(text)` | `str` | `bool` / `str` | Prompt injection detection and sanitization |
 
 **`SkillGapResult`** (Pydantic BaseModel):
 
@@ -209,13 +207,11 @@ CREATE TABLE jobs (
 uv run find_skill_gaps.py resources_eval/resume_d3_eval.txt resources_eval/jobs_d3_eval.db
 ```
 
-**Result**: 30 / 31 gaps match `d3_truth.json`. The only discrepancy is `"sql"` — the LLM extracts it from the resume narrative (which legitimately mentions SQL experience), so it does not appear as a gap. This is expected model behaviour for this resume.
-
 ### Determinism validation
 
 Run the command three times. The `gaps` list must be identical each time. Verified: ✅ (`temperature=0.0` enforces this)
 
-### Jailbreak safety test (BONUS)
+### Jailbreak safety test 
 
 Insert the following line anywhere in the resume file and re-run:
 
@@ -231,7 +227,6 @@ Expected behaviour: the script prints `Warning: Potential prompt injection detec
 
 | Limitation | Details |
 |---|---|
-| `"sql"` gap discrepancy | The LLM correctly identifies SQL experience in the resume narrative. Ground truth treats it as a gap. Minor intentional variation. |
 | Sequential processing | `tag_data.py` processes one job per LLM call. Parallel calls would be faster but risk rate-limit errors. |
 | Static alias table | `normalise_skill()` maps ~40 known aliases. Unknown variants pass through unchanged. |
 | Rate limits | Under quota pressure, the script sleeps for the API-suggested delay, then retries. Progress is preserved (each row is committed immediately). |
@@ -240,6 +235,7 @@ Expected behaviour: the script prints `Warning: Potential prompt injection detec
 | Gemini-only (Day 3-4) | `find_skill_gaps.py` is only validated with Gemini models. Ollama models are not tested for this script. |
 
 ---
+
 
 ### Architecture Reflection
 
