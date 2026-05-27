@@ -27,6 +27,21 @@ load_dotenv()
 app = FastAPI()
 
 DB_PATH = Path(os.getenv("DB_PATH", "/app/data/jobs.db"))
+
+
+@app.on_event("startup")
+async def startup_checks():
+    if not DB_PATH.exists():
+        print(
+            f"WARNING: Database not found at {DB_PATH}. "
+            "/stats and PDF skill-gap analysis will not work until the DB is mounted.",
+            file=sys.stderr,
+        )
+    if not os.getenv("GOOGLE_API_KEY"):
+        print(
+            "WARNING: GOOGLE_API_KEY is not set. Chat and skill-gap analysis will fail.",
+            file=sys.stderr,
+        )
 CHAT_MODEL = os.getenv("CHAT_MODEL", "gemini-2.5-flash-lite")
 SYSTEM_PROMPT = (
     "You are a helpful career assistant specialising in tech jobs in Malaysia. "
@@ -90,7 +105,13 @@ async def chat(req: ChatRequest):
         return JSONResponse({"reply": reply})
 
     except FileNotFoundError as exc:
-        return JSONResponse({"reply": f"Configuration error: {exc}"}, status_code=500)
+        msg = (
+            f"The jobs database was not found ({DB_PATH}). "
+            "Please contact the administrator."
+            if "jobs.db" in str(exc) or str(DB_PATH) in str(exc)
+            else f"A required file was missing: {exc}"
+        )
+        return JSONResponse({"reply": msg}, status_code=503)
     except Exception as exc:
         return JSONResponse(
             {"reply": f"Error processing request: {exc}"}, status_code=500

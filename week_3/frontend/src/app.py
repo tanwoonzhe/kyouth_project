@@ -42,14 +42,33 @@ async def chat(
         contents = await pdf.read()
         if len(contents) > MAX_PDF_BYTES:
             return JSONResponse({"reply": "PDF too large (max 10 MB)."}, status_code=413)
-        pdf_text = _extract_pdf_text(contents)
+        try:
+            pdf_text = _extract_pdf_text(contents)
+        except Exception as exc:
+            return JSONResponse(
+                {"reply": f"Could not read the PDF ({type(exc).__name__}). "
+                           "Please ensure it is a valid, non-corrupted PDF file."},
+                status_code=400,
+            )
+
+    if not message.strip() and not pdf_text.strip():
+        return JSONResponse(
+            {"reply": "Please type a message or upload a PDF resume."},
+            status_code=400,
+        )
 
     payload = {"message": message, "pdf_text": pdf_text}
     try:
         def _post():
             return httpx.post(f"{BACKEND_URL}/chat", json=payload, timeout=120.0)
         resp = await asyncio.to_thread(_post)
-        return JSONResponse(content=resp.json(), status_code=resp.status_code)
+        try:
+            return JSONResponse(content=resp.json(), status_code=resp.status_code)
+        except Exception:
+            return JSONResponse(
+                {"reply": "Backend returned an unexpected response. Please try again."},
+                status_code=502,
+            )
     except Exception as exc:
         return JSONResponse({"reply": f"Backend is not available. ({type(exc).__name__}: {exc})"}, status_code=503)
 
@@ -60,7 +79,13 @@ async def api_stats():
         def _get():
             return httpx.get(f"{BACKEND_URL}/stats", timeout=10.0)
         resp = await asyncio.to_thread(_get)
-        return JSONResponse(content=resp.json(), status_code=resp.status_code)
+        try:
+            return JSONResponse(content=resp.json(), status_code=resp.status_code)
+        except Exception:
+            return JSONResponse(
+                {"error": "Backend returned an unexpected response."},
+                status_code=502,
+            )
     except Exception as exc:
         return JSONResponse({"error": f"Backend is not available. ({type(exc).__name__}: {exc})"}, status_code=503)
 

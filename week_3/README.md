@@ -285,11 +285,19 @@ The `BACKEND_URL=http://backend:8001` environment variable routes all frontend-t
 | Limitation | Detail |
 |------------|--------|
 | **No chat history persistence** | Conversation history lives only in the browser's DOM. Refreshing the page clears all messages. |
-| **No user authentication** | Any user can access the chat interface. There is no login or session management. |
-| **Scanned PDF not supported** | `pypdf` extracts text only from text-based PDFs. Image-only scans return empty text and produce no skill gap output. |
 | **Skill gap accuracy depends on tagging** | If the `tech_stack` column in the database has not been populated by `tag_data.py`, the skill gap analysis returns no results. |
 | **Gemini free-tier quota** | `gemini-2.5-flash` allows ~250 requests/day on the free tier. Heavy usage will hit the quota and return a 429 error. |
-| **Single-turn AI context** | Each chat request is stateless — the AI has no memory of previous messages in the conversation. |
-| **PDF size cap** | Files larger than 10 MB are rejected. Very long resumes (> 4 000 characters of text) are truncated before being sent to the LLM. |
 | **No GPU acceleration** | The Gemini API is used for inference. There is no local GPU acceleration in this configuration. |
-| **Skills chart empty until tagged** | The "Top Skills Required" chart on the Stats page will be empty if `tag_data.py` has not been run against the database. |
+| **Single-turn AI context** | Each chat request is stateless — the AI has no memory of previous messages in the conversation. |
+
+---
+
+## Architecture Reflection
+
+### Design Choices
+
+For this project, I separated the system into frontend and backend services instead of putting everything in one file or one application. The frontend mainly handles the web page, PDF upload, text extraction, and sending requests to the backend. The backend handles the AI logic, Gemini API, MCP access, and SQLite queries. I chose this structure because each part has its own responsibility, so it is easier to understand, debug, and modify. I also used Docker containers for each service, so the project can run more consistently on different computers without many setup problems.
+
+One trade-off I made was choosing simplicity and easier deployment instead of building a very advanced system. For example, I used Docker Compose because it is easy to run with one command, but it is not as powerful as Kubernetes for scaling. I also used plain HTML and JavaScript for the frontend because it does not need a complicated setup, but it has fewer features compared to React or Vue. The chat is also stateless, which makes the backend simpler, but it means the AI cannot remember previous messages. Besides that, using Gemini API is easier because I do not need to run a local AI model, but it depends on internet connection and external API usage.
+
+If I had more time, I would improve the system by adding conversation memory so the AI can understand follow-up questions better. I would also rebuild the frontend using React or Vue to make the interface cleaner and easier to manage. Another improvement is deploying the system to the cloud so it can be accessed online with HTTPS and proper secret management. I would also consider storing resume analysis results in a database for future tracking, adding streaming responses to make the chatbot feel faster, and improving PDF parsing so the system can handle scanned or complex resume formats better.
