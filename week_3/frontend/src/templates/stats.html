@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Job Stats</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
+    <style>
+      :root { --accent: #5c5fcd; }
+      body { background: #f8f9fa; }
+
+      .nav-bar {
+        background: #fff;
+        border-bottom: 1px solid #dee2e6;
+        padding: 12px 28px;
+        display: flex;
+        gap: 24px;
+        align-items: center;
+      }
+      .nav-bar .brand { font-weight: 700; color: var(--accent); font-size: 1rem; }
+      .nav-bar a { color: #6c757d; text-decoration: none; font-size: 0.95rem; }
+      .nav-bar a.active, .nav-bar a:hover { color: var(--accent); font-weight: 500; }
+
+      .stats-wrapper { max-width: 1200px; margin: 32px auto; padding: 0 20px; }
+
+      .card-box {
+        background: #fff;
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 24px;
+        box-shadow: 0 1px 4px rgba(0,0,0,.06);
+      }
+      .card-box h6 { color: #6c757d; margin-bottom: 16px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: .04em; }
+
+      #jobTable thead th { background: var(--accent); color: #fff; border: none; }
+      #jobTable tbody tr:hover { background: #f0f0ff; }
+    </style>
+  </head>
+  <body>
+    <div class="nav-bar">
+      <span class="brand">Resume Helper</span>
+      <a href="/">💬 Chat</a>
+      <a href="/stats" class="active">📊 Stats</a>
+    </div>
+
+    <div class="stats-wrapper">
+
+      <!-- Search bar -->
+      <div class="card-box">
+        <input type="text" id="searchInput" class="form-control"
+               placeholder="Search jobs by title, skill, or location…"
+               oninput="filterTable()">
+      </div>
+
+      <!-- Error alert -->
+      <div id="errorAlert" class="alert alert-warning d-none">
+        ⚠️ Backend is not available. Charts and data will appear once the backend is running.
+      </div>
+
+      <!-- Charts -->
+      <div class="row">
+        <div class="col-md-4">
+          <div class="card-box">
+            <h6>Top Hiring Companies</h6>
+            <canvas id="locationChart"></canvas>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card-box">
+            <h6>Top Skills Required</h6>
+            <canvas id="skillsChart"></canvas>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card-box">
+            <h6>Job Type Distribution</h6>
+            <canvas id="jobTypeChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Jobs table -->
+      <div class="card-box">
+        <h6>Job Listings</h6>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0" id="jobTable">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Company</th>
+                <th>Skills</th>
+              </tr>
+            </thead>
+            <tbody id="jobTableBody">
+              <tr><td colspan="3" class="text-center text-muted py-4">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI"
+            crossorigin="anonymous"></script>
+    <script>
+      const PALETTE = [
+        '#5c5fcd','#7c7fe3','#9c9ff5','#bcbff8',
+        '#3a3daa','#4a4dc0','#6c6fe0','#8c8ff2',
+        '#2a2d9a','#3a3db0','#5c5fd8','#7c7fea',
+      ];
+
+      let allJobs = [];
+
+      function esc(s) {
+        const d = document.createElement('div');
+        d.textContent = String(s ?? '');
+        return d.innerHTML;
+      }
+
+      function makeChart(id, type, labels, values, label) {
+        return new Chart(document.getElementById(id), {
+          type,
+          data: {
+            labels,
+            datasets: [{ label, data: values, backgroundColor: PALETTE, borderWidth: 1 }],
+          },
+          options: {
+            plugins: { legend: { display: type !== 'bar' } },
+            responsive: true,
+            scales: type === 'bar' ? { y: { beginAtZero: true } } : {},
+          },
+        });
+      }
+
+      function renderTable(jobs) {
+        const tbody = document.getElementById('jobTableBody');
+        if (!jobs.length) {
+          tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-4">No jobs found.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = jobs.map(j => `
+          <tr>
+            <td>${esc(j.title)}</td>
+            <td>${esc(j.company)}</td>
+            <td>${esc(Array.isArray(j.skills) ? j.skills.slice(0, 6).join(', ') : j.skills)}</td>
+          </tr>
+        `).join('');
+      }
+
+      function filterTable() {
+        const q = document.getElementById('searchInput').value.toLowerCase();
+        const filtered = allJobs.filter(j =>
+          (j.title   ?? '').toLowerCase().includes(q) ||
+          (j.company ?? '').toLowerCase().includes(q) ||
+          (Array.isArray(j.skills) ? j.skills.join(' ') : (j.skills ?? '')).toLowerCase().includes(q)
+        );
+        renderTable(filtered);
+      }
+
+      async function loadStats() {
+        try {
+          const res  = await fetch('/api/stats');
+          const data = await res.json();
+
+          if (data.error) {
+            document.getElementById('errorAlert').classList.remove('d-none');
+            document.getElementById('jobTableBody').innerHTML =
+              '<tr><td colspan="3" class="text-center text-muted py-4">No data available.</td></tr>';
+            return;
+          }
+
+          if (data.location_distribution) {
+            makeChart('locationChart', 'pie',
+              Object.keys(data.location_distribution),
+              Object.values(data.location_distribution),
+              'Locations');
+          }
+          if (data.top_skills) {
+            makeChart('skillsChart', 'bar',
+              Object.keys(data.top_skills),
+              Object.values(data.top_skills),
+              'Count');
+          }
+          if (data.job_type_distribution) {
+            makeChart('jobTypeChart', 'doughnut',
+              Object.keys(data.job_type_distribution),
+              Object.values(data.job_type_distribution),
+              'Job Types');
+          }
+
+          allJobs = data.jobs ?? [];
+          renderTable(allJobs);
+        } catch {
+          document.getElementById('errorAlert').classList.remove('d-none');
+          document.getElementById('jobTableBody').innerHTML =
+            '<tr><td colspan="3" class="text-center text-muted py-4">No data available.</td></tr>';
+        }
+      }
+
+      loadStats();
+    </script>
+  </body>
+</html>

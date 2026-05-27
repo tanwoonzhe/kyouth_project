@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+
+# Docker secrets (never commit real keys)
+secrets/
+!secrets/.gitkeep
+
+# uv
+.python-version
+
+# Docker
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

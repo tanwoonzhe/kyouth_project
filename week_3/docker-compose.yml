@@ -1,0 +1,41 @@
+services:
+  frontend:
+    image: frontend
+    pull_policy: build
+    build:
+      context: ./frontend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      - backend
+    networks:
+      - app_network
+
+  backend:
+    image: backend
+    pull_policy: build
+    build:
+      context: ./backend
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env
+    secrets:
+      - google_api_key
+    volumes:
+      # Mount the jobs database from week_2 into the container (read-only)
+      - ../week_2/src/jobs.db:/app/data/jobs.db:ro
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge
+
+# Bonus 2: Docker secrets — store sensitive values as files instead of env vars
+# Create the file before running: echo "your_key" > secrets/google_api_key.txt
+secrets:
+  google_api_key:
+    file: ./secrets/google_api_key.txt
