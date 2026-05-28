@@ -11,8 +11,9 @@ build/
 .env
 
 # Docker secrets (never commit real keys)
-secrets/
+secrets/*
 !secrets/.gitkeep
+!secrets/google_api_key.txt.example
 
 # uv
 
