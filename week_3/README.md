@@ -49,9 +49,21 @@ Do **not** put your API key in `.env` — use Docker secrets instead (see step 3
 
 ### 3 — Add your Google API key as a Docker secret
 
+The `secrets/` folder already exists in the repo. Create the key file using one of the commands below depending on your OS.
+
+**macOS / Linux / Git Bash:**
 ```bash
-mkdir -p secrets
-echo "YOUR_GOOGLE_API_KEY" > secrets/google_api_key.txt
+echo -n "YOUR_GOOGLE_API_KEY" > secrets/google_api_key.txt
+```
+
+**Windows PowerShell** (⚠️ do **not** use `echo` — it writes UTF-16):
+```powershell
+[System.IO.File]::WriteAllText("secrets\google_api_key.txt", "YOUR_GOOGLE_API_KEY")
+```
+
+**Windows Command Prompt:**
+```cmd
+<nul set /p="YOUR_GOOGLE_API_KEY" > secrets\google_api_key.txt
 ```
 
 The key is never stored in `.env` or committed to git (the `secrets/` folder is in `.gitignore`).
