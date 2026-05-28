@@ -43,10 +43,40 @@ async def startup_checks():
             file=sys.stderr,
         )
 CHAT_MODEL = os.getenv("CHAT_MODEL", "gemini-2.5-flash-lite")
+CHAT_FALLBACK_MODEL = os.getenv("CHAT_FALLBACK_MODEL", "gemini-2.5-flash")
 SYSTEM_PROMPT = (
     "You are a helpful career assistant specialising in tech jobs in Malaysia. "
     "Answer questions about skills, job market trends, and career advice concisely."
 )
+
+_SKILL_GAP_KEYWORDS = {
+    "skill gap", "skills gap", "skill gaps", "skills gaps",
+    "missing skill", "missing skills", "find gap", "find gaps",
+    "lacking skill", "lacking skills", "what skill", "what skills",
+    "gap analysis",
+}
+
+
+def _is_skill_gap_request(message: str) -> bool:
+    """Return True if the message is asking for skill-gap analysis."""
+    lower = message.lower()
+    return any(kw in lower for kw in _SKILL_GAP_KEYWORDS)
+
+
+def _is_retryable_error(reply: str) -> bool:
+    """Return True if prompt_model returned a 503/429 error string."""
+    return reply.startswith("Error:") and (
+        "503" in reply or "UNAVAILABLE" in reply
+        or "429" in reply or "quota" in reply.lower()
+    )
+
+
+async def _chat(prompt: str) -> str:
+    """Call prompt_model with CHAT_MODEL, falling back to CHAT_FALLBACK_MODEL on 503/429."""
+    reply = await asyncio.to_thread(prompt_model, CHAT_MODEL, prompt)
+    if _is_retryable_error(reply):
+        reply = await asyncio.to_thread(prompt_model, CHAT_FALLBACK_MODEL, prompt)
+    return reply
 
 
 class ChatRequest(BaseModel):
@@ -63,44 +93,43 @@ async def health():
 async def chat(req: ChatRequest):
     try:
         if req.pdf_text.strip():
-            # Resume uploaded — write to temp file, then run skill-gap analysis in a
-            # thread so that find_skill_gaps can safely call asyncio.run() internally.
-            with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".txt", delete=False, encoding="utf-8"
-            ) as tmp:
-                tmp.write(req.pdf_text)
-                tmp_path = tmp.name
+            if _is_skill_gap_request(req.message):
+                # Skill-gap analysis — write resume to temp file and run pipeline
+                with tempfile.NamedTemporaryFile(
+                    mode="w", suffix=".txt", delete=False, encoding="utf-8"
+                ) as tmp:
+                    tmp.write(req.pdf_text)
+                    tmp_path = tmp.name
 
-            try:
-                result = await asyncio.to_thread(
-                    find_skill_gaps, tmp_path, str(DB_PATH)
-                )
-            finally:
-                Path(tmp_path).unlink(missing_ok=True)
-
-            if result.gaps:
-                top_gaps = result.gaps[:20]
-                gap_list = ", ".join(top_gaps)
-                reply = (
-                    "Based on your resume and the current job market, "
-                    "the following skills are most in demand but missing from your profile:\n\n"
-                    f"{gap_list}"
-                )
-                if req.message.strip():
-                    followup = await asyncio.to_thread(
-                        prompt_model,
-                        CHAT_MODEL,
-                        f"{SYSTEM_PROMPT}\n\nUser question: {req.message}\n"
-                        f"Identified skill gaps: {gap_list}\n\nAnswer concisely:",
+                try:
+                    result = await asyncio.to_thread(
+                        find_skill_gaps, tmp_path, str(DB_PATH)
                     )
-                    reply = f"{reply}\n\n{followup}"
+                finally:
+                    Path(tmp_path).unlink(missing_ok=True)
+
+                if result.gaps:
+                    reply = (
+                        "Skills gap identified:\n\n"
+                        + " - ".join([""] + result.gaps)
+                    )
+                else:
+                    reply = "No significant skill gaps were found in your resume."
+
             else:
-                reply = "No significant skill gaps were found in your resume."
+                # Free-form Q&A with the resume as context (summarise, review, etc.)
+                user_q = req.message.strip() or "Please summarise this resume."
+                full_prompt = (
+                    f"{SYSTEM_PROMPT}\n\n"
+                    f"Resume content:\n{req.pdf_text}\n\n"
+                    f"User: {user_q}\n\nAssistant:"
+                )
+                reply = await _chat(full_prompt)
 
         else:
             # General chat — no resume
             full_prompt = f"{SYSTEM_PROMPT}\n\nUser: {req.message}\n\nAssistant:"
-            reply = await asyncio.to_thread(prompt_model, CHAT_MODEL, full_prompt)
+            reply = await _chat(full_prompt)
 
         return JSONResponse({"reply": reply})
 

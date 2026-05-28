@@ -17,7 +17,8 @@ services:
     image: backend
     pull_policy: build
     build:
-      context: ./backend
+      context: ..
+      dockerfile: week_3/backend/Dockerfile
     ports:
       - "8001:8001"
     env_file:
@@ -26,7 +27,8 @@ services:
       - google_api_key
     volumes:
       # Mount the jobs database from week_2 into the container (read-only)
-      - ../week_2/src/jobs.db:/app/data/jobs.db:ro
+      #- ../week_2/src/jobs.db:/app/data/jobs.db:ro
+      - ../week_2/resources_eval/jobs_d3_eval.db:/app/data/jobs.db:ro
     networks:
       - app_network
 
