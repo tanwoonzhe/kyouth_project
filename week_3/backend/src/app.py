@@ -14,11 +14,12 @@ from pydantic import BaseModel
 # Bonus 2: load GOOGLE_API_KEY from Docker secret file if present
 # read_bytes + decode handles UTF-8, UTF-16 LE/BE (with or without BOM)
 # so the file works regardless of how it was created (PowerShell, bash, etc.)
+# Always override .env — secret file takes priority (avoids placeholder leaking in)
 _secret_key_path = Path("/run/secrets/google_api_key")
 if _secret_key_path.exists():
     _raw = _secret_key_path.read_bytes()
     _key = _raw.decode("utf-16" if _raw[:2] in (b"\xff\xfe", b"\xfe\xff") else "utf-8").strip()
-    os.environ.setdefault("GOOGLE_API_KEY", _key)
+    os.environ["GOOGLE_API_KEY"] = _key
 
 # Ensure the week_2 package is importable when uvicorn is run from backend/
 sys.path.insert(0, str(Path(__file__).parent))
