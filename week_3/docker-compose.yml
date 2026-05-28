@@ -17,8 +17,7 @@ services:
     image: backend
     pull_policy: build
     build:
-      context: ..
-      dockerfile: week_3/backend/Dockerfile
+      context: ./backend
     ports:
       - "8001:8001"
     env_file:

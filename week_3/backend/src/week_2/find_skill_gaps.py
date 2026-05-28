@@ -10,8 +10,8 @@ from fastmcp import Client as MCPClient
 from fastmcp.exceptions import ToolError
 from pydantic import BaseModel
 
-from mcp_server import mcp as _jobs_db_mcp
-from prompt_model import prompt_model_full
+from .mcp_server import mcp as _jobs_db_mcp
+from .prompt_model import prompt_model_full
 
 
 # Primary model for resume skill extraction; uses a capable but fast model
