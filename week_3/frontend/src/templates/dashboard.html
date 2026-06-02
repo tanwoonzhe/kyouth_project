@@ -1,0 +1,863 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SkillScope — Job Market Trend Analyzer</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+        integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB"
+        crossorigin="anonymous">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
+  <style>
+    /* ── Design tokens ── */
+    :root {
+      --primary:        #4f46e5;
+      --primary-light:  #eef2ff;
+      --success:        #10b981;
+      --success-light:  #ecfdf5;
+      --warning:        #f59e0b;
+      --warning-light:  #fffbeb;
+      --danger:         #ef4444;
+      --danger-light:   #fef2f2;
+      --bg:             #f1f5f9;
+      --card:           #ffffff;
+      --border:         #e2e8f0;
+      --text:           #1e293b;
+      --muted:          #64748b;
+      --radius:         12px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+      color: var(--text);
+      margin: 0;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .app-header {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--primary);
+      text-decoration: none;
+    }
+
+    .brand-icon {
+      width: 30px;
+      height: 30px;
+      background: var(--primary);
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+
+    .header-nav a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.88rem;
+      padding: 6px 12px;
+      border-radius: 6px;
+      transition: color .15s, background .15s;
+    }
+    .header-nav a:hover { color: var(--primary); background: var(--primary-light); }
+
+    /* ── Main layout ── */
+    .main-wrapper {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 24px 20px 48px;
+    }
+
+    .layout-grid {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    @media (max-width: 900px) {
+      .layout-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .card:last-child { margin-bottom: 0; }
+
+    .card-title {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
+    /* ── Input panel ── */
+    .input-panel .card { margin-bottom: 0; }
+
+    .form-label {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text);
+      margin-bottom: 6px;
+      display: block;
+    }
+
+    .form-control,
+    .form-select {
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.9rem;
+      padding: 8px 12px;
+      width: 100%;
+      color: var(--text);
+      background: #fff;
+      transition: border-color .15s, box-shadow .15s;
+      appearance: auto;
+    }
+    .form-control:focus,
+    .form-select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(79,70,229,.12);
+    }
+    .form-control.is-invalid,
+    .form-select.is-invalid { border-color: var(--danger); }
+
+    .form-hint {
+      font-size: 0.76rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .form-group { margin-bottom: 16px; }
+
+    /* Upload area */
+    .upload-area {
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      padding: 18px 12px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+    }
+    .upload-area:hover { border-color: var(--primary); background: var(--primary-light); }
+
+    .upload-area input[type="file"] { display: none; }
+
+    .upload-label {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    .upload-icon {
+      width: 28px;
+      height: 28px;
+      color: var(--muted);
+    }
+
+    .upload-text {
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    .upload-badge {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      color: var(--primary);
+      font-weight: 500;
+      margin-top: 8px;
+      background: var(--primary-light);
+      border-radius: 6px;
+      padding: 4px 10px;
+    }
+
+    .upload-clear {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1;
+      padding: 0 2px;
+    }
+    .upload-clear:hover { color: var(--danger); }
+
+    /* Analyze button */
+    .btn-analyze {
+      width: 100%;
+      padding: 10px;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: filter .15s, transform .1s;
+      margin-top: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-analyze:hover:not(:disabled) { filter: brightness(0.88); }
+    .btn-analyze:active:not(:disabled) { transform: scale(0.98); }
+    .btn-analyze:disabled { opacity: .6; cursor: not-allowed; }
+
+    /* ── Results panel states ── */
+    .empty-state,
+    .loading-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 64px 32px;
+      text-align: center;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      min-height: 380px;
+    }
+
+    .empty-icon { font-size: 3rem; margin-bottom: 16px; }
+
+    .empty-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .empty-subtitle {
+      font-size: 0.88rem;
+      color: var(--muted);
+      max-width: 290px;
+      line-height: 1.6;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+      margin-bottom: 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-text { font-size: .9rem; color: var(--muted); }
+
+    .error-state {
+      display: none;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 14px 18px;
+      background: var(--danger-light);
+      border: 1px solid #fecaca;
+      border-radius: var(--radius);
+      font-size: 0.88rem;
+      color: #991b1b;
+      margin-bottom: 16px;
+    }
+
+    /* ── Summary row ── */
+    .summary-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 480px) { .summary-row { grid-template-columns: 1fr; } }
+
+    .score-card,
+    .jobs-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      min-height: 160px;
+    }
+
+    /* SVG score ring */
+    .score-ring-wrap {
+      position: relative;
+      width: 96px;
+      height: 96px;
+      margin: 0 auto 10px;
+    }
+
+    .score-svg {
+      width: 96px;
+      height: 96px;
+      transform: rotate(-90deg);
+    }
+
+    .score-bg   { fill: none; stroke: var(--border); stroke-width: 8; }
+    .score-fill {
+      fill: none;
+      stroke: var(--success);
+      stroke-width: 8;
+      stroke-linecap: round;
+      stroke-dasharray: 283;
+      stroke-dashoffset: 283;
+      transition: stroke-dashoffset .9s cubic-bezier(.4,0,.2,1), stroke .4s ease;
+    }
+
+    .score-num {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .stat-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--muted);
+    }
+
+    .jobs-number {
+      font-size: 2.4rem;
+      font-weight: 800;
+      color: var(--text);
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+
+    /* ── Skills grid ── */
+    .skills-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 560px) { .skills-grid { grid-template-columns: 1fr; } }
+
+    .skill-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      font-weight: 500;
+      margin: 3px 2px;
+      white-space: nowrap;
+    }
+
+    .tag-matched {
+      background: var(--success-light);
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+    }
+    .tag-high {
+      background: var(--danger-light);
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+    .tag-medium {
+      background: var(--warning-light);
+      color: #92400e;
+      border: 1px solid #fde68a;
+    }
+    .tag-low {
+      background: #f8fafc;
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+
+    .prio-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .prio-dot-high   { background: var(--danger); }
+    .prio-dot-medium { background: var(--warning); }
+    .prio-dot-low    { background: var(--muted); }
+    .prio-dot-matched { background: var(--success); }
+
+    /* ── Chart ── */
+    .chart-wrap { position: relative; height: 220px; }
+
+    /* ── AI / Limitations text ── */
+    .reco-text {
+      font-size: .92rem;
+      line-height: 1.75;
+      color: var(--text);
+    }
+
+    .limit-text {
+      font-size: .83rem;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+
+    /* ── Mock badge ── */
+    .mock-badge {
+      display: none;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      background: #fef3c7;
+      color: #92400e;
+      border: 1px solid #fde68a;
+      border-radius: 6px;
+      font-size: .75rem;
+      font-weight: 600;
+      margin-bottom: 14px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header class="app-header">
+  <a href="/" class="brand">
+    <div class="brand-icon">S</div>
+    SkillScope
+  </a>
+  <nav class="header-nav">
+    <a href="/stats">📊 Market Stats</a>
+  </nav>
+</header>
+
+<!-- ── Main ── -->
+<main class="main-wrapper">
+  <div class="layout-grid">
+
+    <!-- ════════════ LEFT: Input panel ════════════ -->
+    <div class="input-panel">
+      <div class="card">
+        <div class="card-title">Analyze Your Market Fit</div>
+
+        <form id="analyzeForm" novalidate>
+
+          <div class="form-group">
+            <label class="form-label" for="targetRole">Target Role</label>
+            <select class="form-select" id="targetRole" name="target_role" required>
+              <option value="">Select a role…</option>
+              <option>AI Engineer</option>
+              <option>Applied AI Engineer</option>
+              <option>AI Chatbot Developer</option>
+              <option>AI Software Engineer</option>
+              <option>Machine Learning Engineer</option>
+              <option>Computer Vision Engineer</option>
+              <option>Data Scientist</option>
+              <option>Data Engineer</option>
+              <option>Backend Developer</option>
+              <option>Full Stack Developer</option>
+              <option>Software Engineer</option>
+              <option>DevOps / Cloud Engineer</option>
+              <option>Algorithm Engineer</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="location">Location</label>
+            <select class="form-select" id="location" name="location" required>
+              <option value="">Select a location…</option>
+              <option>Kuala Lumpur</option>
+              <option>Selangor</option>
+              <option>Cyberjaya, Selangor</option>
+              <option>Petaling Jaya, Selangor</option>
+              <option>Penang</option>
+              <option>Johor Bahru</option>
+              <option>Melaka</option>
+              <option>Remote / Malaysia</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="currentSkills">Your Current Skills</label>
+            <textarea class="form-control" id="currentSkills" name="current_skills"
+                      rows="3"
+                      placeholder="e.g. Python, SQL, Docker, FastAPI, Git…"></textarea>
+            <div class="form-hint">Separate skills with commas</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">
+              Resume
+              <span style="color:var(--muted);font-weight:400;">(optional)</span>
+            </label>
+            <div class="upload-area" id="uploadArea">
+              <input type="file" id="pdfInput" name="pdf" accept=".pdf">
+              <label for="pdfInput" class="upload-label">
+                <svg class="upload-icon" xmlns="http://www.w3.org/2000/svg"
+                     fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586
+                           a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                <span class="upload-text">Click to upload PDF resume</span>
+              </label>
+              <div class="upload-badge" id="uploadBadge">
+                📄 <span id="uploadName"></span>
+                <button type="button" class="upload-clear" id="clearPdf" title="Remove file">✕</button>
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" class="btn-analyze" id="analyzeBtn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                 fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2
+                       a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0
+                       a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14
+                       a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+            </svg>
+            Analyze Market
+          </button>
+
+        </form>
+      </div><!-- /.card -->
+    </div><!-- /.input-panel -->
+
+    <!-- ════════════ RIGHT: Results panel ════════════ -->
+    <div class="results-panel">
+
+      <!-- Empty state -->
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">🎯</div>
+        <div class="empty-title">Ready to analyze your market fit?</div>
+        <div class="empty-subtitle">
+          Select a target role and location, enter your skills,
+          then click <strong>Analyze Market</strong>.
+        </div>
+      </div>
+
+      <!-- Loading state -->
+      <div class="loading-state" id="loadingState" style="display:none">
+        <div class="spinner"></div>
+        <div class="loading-text">Analyzing market data…</div>
+      </div>
+
+      <!-- Error state -->
+      <div class="error-state" id="errorState">
+        <span style="font-size:1.1rem;flex-shrink:0;">⚠️</span>
+        <span id="errorMsg">An unexpected error occurred. Please try again.</span>
+      </div>
+
+      <!-- ── Results (hidden until analysis runs) ── -->
+      <div id="resultsState" style="display:none">
+
+        <!-- Mock data notice -->
+        <div class="mock-badge" id="mockBadge">
+          ⚠️ Demo data — backend unavailable
+        </div>
+
+        <!-- Score + Total Jobs -->
+        <div class="summary-row">
+
+          <div class="score-card">
+            <div class="score-ring-wrap">
+              <svg class="score-svg" viewBox="0 0 100 100">
+                <circle class="score-bg"   cx="50" cy="50" r="45"/>
+                <circle class="score-fill" id="scoreRing" cx="50" cy="50" r="45"/>
+              </svg>
+              <div class="score-num" id="scoreNumber">—</div>
+            </div>
+            <div class="stat-label">Match Score</div>
+          </div>
+
+          <div class="jobs-card">
+            <div class="jobs-number" id="totalJobs">—</div>
+            <div class="stat-label">Jobs Analyzed</div>
+          </div>
+
+        </div><!-- /.summary-row -->
+
+        <!-- Top Market Skills bar chart -->
+        <div class="card">
+          <div class="card-title">📊 Top Market Skills</div>
+          <div class="chart-wrap">
+            <canvas id="skillsChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Matched + Missing Skills -->
+        <div class="skills-grid">
+
+          <div class="card">
+            <div class="card-title">✅ Matched Skills</div>
+            <div id="matchedSkillsList">
+              <span style="font-size:.82rem;color:var(--muted);">—</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">⚠️ Missing Skills</div>
+            <div id="missingSkillsList">
+              <span style="font-size:.82rem;color:var(--muted);">—</span>
+            </div>
+          </div>
+
+        </div><!-- /.skills-grid -->
+
+        <!-- AI Recommendation -->
+        <div class="card">
+          <div class="card-title">🤖 AI Recommendation</div>
+          <p class="reco-text" id="aiRecommendation">—</p>
+        </div>
+
+        <!-- Limitations -->
+        <div class="card">
+          <div class="card-title">ⓘ Limitations &amp; Notes</div>
+          <p class="limit-text" id="limitations">—</p>
+        </div>
+
+      </div><!-- /#resultsState -->
+
+    </div><!-- /.results-panel -->
+
+  </div><!-- /.layout-grid -->
+</main><!-- /.main-wrapper -->
+
+<script type="module">
+  import { analyzeMarket } from '/static/services/api.js';
+
+  // ── DOM refs ────────────────────────────────────────────────
+  const form        = document.getElementById('analyzeForm');
+  const analyzeBtn  = document.getElementById('analyzeBtn');
+  const pdfInput    = document.getElementById('pdfInput');
+  const uploadBadge = document.getElementById('uploadBadge');
+  const uploadName  = document.getElementById('uploadName');
+  const clearPdfBtn = document.getElementById('clearPdf');
+
+  const emptyState   = document.getElementById('emptyState');
+  const loadingState = document.getElementById('loadingState');
+  const errorState   = document.getElementById('errorState');
+  const errorMsg     = document.getElementById('errorMsg');
+  const resultsState = document.getElementById('resultsState');
+  const mockBadge    = document.getElementById('mockBadge');
+
+  const scoreRing   = document.getElementById('scoreRing');
+  const scoreNumber = document.getElementById('scoreNumber');
+  const totalJobs   = document.getElementById('totalJobs');
+  const matchedList = document.getElementById('matchedSkillsList');
+  const missingList = document.getElementById('missingSkillsList');
+  const aiRec       = document.getElementById('aiRecommendation');
+  const limitText   = document.getElementById('limitations');
+
+  const roleSelect     = document.getElementById('targetRole');
+  const locationSelect = document.getElementById('location');
+
+  const CIRCUMFERENCE = 2 * Math.PI * 45; // ≈ 283
+  let skillsChart = null;
+
+  // ── PDF upload badge ────────────────────────────────────────
+  pdfInput.addEventListener('change', () => {
+    if (pdfInput.files.length) {
+      uploadName.textContent    = pdfInput.files[0].name;
+      uploadBadge.style.display = 'flex';
+    }
+  });
+
+  clearPdfBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    pdfInput.value            = '';
+    uploadBadge.style.display = 'none';
+    uploadName.textContent    = '';
+  });
+
+  // ── State helpers ────────────────────────────────────────────
+  function showState(name) {
+    emptyState.style.display   = name === 'empty'   ? 'flex'  : 'none';
+    loadingState.style.display = name === 'loading' ? 'flex'  : 'none';
+    errorState.style.display   = name === 'error'   ? 'flex'  : 'none';
+    resultsState.style.display = name === 'results' ? 'block' : 'none';
+  }
+
+  // ── Score ring ───────────────────────────────────────────────
+  function setScore(score) {
+    const s      = Math.max(0, Math.min(100, score));
+    const offset = CIRCUMFERENCE * (1 - s / 100);
+    scoreRing.style.strokeDashoffset = offset;
+    scoreRing.style.stroke =
+      s >= 70 ? '#10b981' :
+      s >= 40 ? '#f59e0b' : '#ef4444';
+    scoreNumber.textContent = `${s}%`;
+  }
+
+  // ── Skills chart (horizontal bar) ───────────────────────────
+  function renderChart(skills) {
+    const ctx = document.getElementById('skillsChart').getContext('2d');
+    if (skillsChart) skillsChart.destroy();
+    skillsChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels:   skills.map(s => s.skill),
+        datasets: [{
+          data:            skills.map(s => s.count),
+          backgroundColor: 'rgba(79,70,229,.7)',
+          borderColor:     'rgba(79,70,229,1)',
+          borderWidth:     1,
+          borderRadius:    4,
+        }],
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+          y: { grid: { display: false }, ticks: { font: { size: 11 } } },
+        },
+      },
+    });
+  }
+
+  // ── Skill tags ───────────────────────────────────────────────
+  function renderMatched(skills) {
+    if (!skills.length) {
+      matchedList.innerHTML =
+        '<span style="font-size:.82rem;color:var(--muted);">No matches in top market skills.</span>';
+      return;
+    }
+    matchedList.innerHTML = skills
+      .map(s => `<span class="skill-tag tag-matched">
+                   <span class="prio-dot prio-dot-matched"></span>${escHtml(s)}
+                 </span>`)
+      .join('');
+  }
+
+  function renderMissing(skills) {
+    if (!skills.length) {
+      missingList.innerHTML =
+        '<span style="font-size:.82rem;color:var(--muted);">No significant gaps found! 🎉</span>';
+      return;
+    }
+    const PRIO_LABELS = { high: 'High', medium: 'Med', low: 'Low' };
+    missingList.innerHTML = skills.map(s => {
+      const p   = (s.priority || 'low').toLowerCase();
+      const lbl = PRIO_LABELS[p] || p;
+      return `<span class="skill-tag tag-${p}">
+                <span class="prio-dot prio-dot-${p}"></span>
+                ${escHtml(s.skill)}
+                <span style="opacity:.6;font-size:.68rem;">${lbl}</span>
+              </span>`;
+    }).join('');
+  }
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ── Inline field validation ──────────────────────────────────
+  function validateForm() {
+    let valid = true;
+    if (!roleSelect.value) {
+      roleSelect.classList.add('is-invalid');
+      valid = false;
+    }
+    if (!locationSelect.value) {
+      locationSelect.classList.add('is-invalid');
+      valid = false;
+    }
+    return valid;
+  }
+
+  roleSelect.addEventListener('change',     () => roleSelect.classList.remove('is-invalid'));
+  locationSelect.addEventListener('change', () => locationSelect.classList.remove('is-invalid'));
+
+  // ── Form submit ──────────────────────────────────────────────
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!validateForm()) return;
+
+    showState('loading');
+    analyzeBtn.disabled           = true;
+    analyzeBtn.lastChild.textContent = ' Analyzing…';
+
+    try {
+      const data = await analyzeMarket(new FormData(form));
+
+      // Populate score + jobs
+      setScore(data.match_score ?? 0);
+      const jobs = data.total_jobs ?? 0;
+      totalJobs.textContent = jobs >= 100 ? `${jobs}+` : String(jobs);
+
+      // Chart + skills
+      renderChart(data.top_market_skills ?? []);
+      renderMatched(data.matched_skills  ?? []);
+      renderMissing(data.missing_skills  ?? []);
+
+      // Text fields
+      aiRec.textContent     = data.ai_recommendation || '—';
+      limitText.textContent = data.limitations       || '—';
+
+      // Mock badge
+      mockBadge.style.display = data._mock ? 'flex' : 'none';
+
+      showState('results');
+
+    } catch (err) {
+      errorMsg.textContent = err.message || 'Unexpected error. Please try again.';
+      showState('error');
+    } finally {
+      analyzeBtn.disabled = false;
+      // Restore button label (last text node)
+      analyzeBtn.lastChild.textContent = ' Analyze Market';
+    }
+  });
+</script>
+
+</body>
+</html>
