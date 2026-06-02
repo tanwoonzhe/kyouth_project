@@ -49,3 +49,49 @@ export async function getStats() {
 
   return response.json();
 }
+
+/**
+ * Fetch distinct job roles for the Target Role dropdown.
+ * Returns a string array; the server falls back to a preset list if the
+ * backend is unavailable.
+ * @returns {Promise<string[]>}
+ */
+export async function getRoles() {
+  let response;
+  try {
+    response = await fetch('/api/roles');
+  } catch {
+    throw new Error('Could not reach the server.');
+  }
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || `Roles unavailable (${response.status})`);
+  }
+
+  const data = await response.json();
+  return data.roles ?? data;
+}
+
+/**
+ * Fetch distinct locations for the Location dropdown.
+ * Returns a string array; the server falls back to a preset list if the
+ * backend is unavailable.
+ * @returns {Promise<string[]>}
+ */
+export async function getLocations() {
+  let response;
+  try {
+    response = await fetch('/api/locations');
+  } catch {
+    throw new Error('Could not reach the server.');
+  }
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || `Locations unavailable (${response.status})`);
+  }
+
+  const data = await response.json();
+  return data.locations ?? data;
+}

@@ -100,6 +100,34 @@ async def api_stats():
         return JSONResponse({"error": f"Backend is not available. ({type(exc).__name__}: {exc})"}, status_code=503)
 
 
+@app.get("/api/roles")
+async def api_roles():
+    """Return distinct job roles. Tries backend /roles first; falls back to preset list."""
+    try:
+        def _get():
+            return httpx.get(f"{BACKEND_URL}/roles", timeout=5.0)
+        resp = await asyncio.to_thread(_get)
+        if resp.status_code == 200:
+            return JSONResponse(content=resp.json(), status_code=200)
+    except Exception:
+        pass
+    return JSONResponse({"roles": _MOCK_ROLES, "_fallback": True})
+
+
+@app.get("/api/locations")
+async def api_locations():
+    """Return distinct locations. Tries backend /locations first; falls back to preset list."""
+    try:
+        def _get():
+            return httpx.get(f"{BACKEND_URL}/locations", timeout=5.0)
+        resp = await asyncio.to_thread(_get)
+        if resp.status_code == 200:
+            return JSONResponse(content=resp.json(), status_code=200)
+    except Exception:
+        pass
+    return JSONResponse({"locations": _MOCK_LOCATIONS, "_fallback": True})
+
+
 def _extract_pdf_text(contents: bytes) -> str:
     reader = pypdf.PdfReader(io.BytesIO(contents))
     return "\n".join(page.extract_text() or "" for page in reader.pages)
@@ -120,6 +148,34 @@ _MOCK_TOP_SKILLS: list[dict] = [
     {"skill": "LLM / GenAI", "count": 45},
 ]
 
+_MOCK_ROLES: list[str] = [
+    "AI Engineer",
+    "Applied AI Engineer",
+    "AI Chatbot Developer",
+    "AI Software Engineer",
+    "Machine Learning Engineer",
+    "Computer Vision Engineer",
+    "Data Scientist",
+    "Data Engineer",
+    "Backend Developer",
+    "Full Stack Developer",
+    "Software Engineer",
+    "DevOps / Cloud Engineer",
+    "Algorithm Engineer",
+]
+
+_MOCK_LOCATIONS: list[str] = [
+    "Kuala Lumpur",
+    "Selangor",
+    "Cyberjaya, Selangor",
+    "Petaling Jaya, Selangor",
+    "Penang",
+    "Johor Bahru",
+    "Melaka",
+    "Remote / Malaysia",
+]
+
+
 
 def _build_analyze_prompt(
     target_role: str,
@@ -127,16 +183,18 @@ def _build_analyze_prompt(
     user_skills: list[str],
     top_market_skills: list[dict],
     pdf_text: str = "",
+    expected_salary: str = "",
 ) -> str:
     market_str = ", ".join(s["skill"] for s in top_market_skills[:10])
     skills_str = ", ".join(user_skills) if user_skills else "not specified"
     resume_part = f"\n\nResume excerpt:\n{pdf_text[:800]}" if pdf_text else ""
+    salary_part = f"\nExpected Salary: {expected_salary}" if expected_salary else ""
     return (
         "You are a career analyst for tech jobs in Malaysia. "
         "Analyze the profile below and return ONLY valid JSON with NO markdown.\n\n"
         f"Target Role: {target_role}\n"
         f"Location: {location}\n"
-        f"User Skills: {skills_str}{resume_part}\n"
+        f"User Skills: {skills_str}{resume_part}{salary_part}\n"
         f"Top Market Skills: {market_str}\n\n"
         "Return exactly this JSON (nothing else):\n"
         '{"match_score": <0-100>, '
@@ -174,6 +232,7 @@ async def analyze(
     target_role: Annotated[str, Form()],
     location: Annotated[str, Form()],
     current_skills: Annotated[str, Form()] = "",
+    expected_salary: Annotated[str, Form()] = "",
     pdf: Annotated[UploadFile | None, File()] = None,
 ):
     # 1. Extract PDF text
@@ -231,7 +290,7 @@ async def analyze(
     ai_result: dict = {}
     if stats_data:
         prompt = _build_analyze_prompt(
-            target_role, location, user_skills, top_market_skills, pdf_text
+            target_role, location, user_skills, top_market_skills, pdf_text, expected_salary
         )
         try:
             def _post_chat():
@@ -273,5 +332,6 @@ async def analyze(
         "missing_skills": missing_skills,
         "ai_recommendation": ai_recommendation,
         "limitations": limitations,
+        "expected_salary": expected_salary or None,
         "_mock": not bool(stats_data),
     })

@@ -75,6 +75,19 @@
     .header-nav a:hover,
     .header-nav a.active { color: var(--primary); background: var(--primary-light); font-weight: 500; }
 
+    .btn-refresh {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 0.82rem; font-weight: 500;
+      color: var(--primary); background: var(--primary-light);
+      border: 1px solid #c7d2fe; border-radius: 6px;
+      padding: 5px 12px; cursor: pointer;
+      transition: background .15s, box-shadow .15s;
+    }
+    .btn-refresh:hover { background: #e0e7ff; box-shadow: 0 1px 4px rgba(79,70,229,.15); }
+    .btn-refresh:disabled { opacity: .55; cursor: default; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin .7s linear infinite; display: inline-block; }
+
     /* ── Wrapper ── */
     .stats-wrapper { max-width: 1200px; margin: 0 auto; padding: 28px 20px 56px; }
 
@@ -271,9 +284,12 @@
     <div class="brand-icon">S</div>
     SkillScope
   </a>
-  <nav class="header-nav">
+  <nav class="header-nav" style="display:flex;align-items:center;gap:6px;">
     <a href="/">🎯 Analyzer</a>
     <a href="/stats" class="active">📊 Stats</a>
+    <button class="btn-refresh" id="refreshBtn" onclick="refreshStats()" title="Refresh data">
+      <span id="refreshIcon">↻</span> Refresh
+    </button>
   </nav>
 </header>
 
@@ -361,11 +377,13 @@
             <th>Title</th>
             <th>Company</th>
             <th>Location</th>
+            <th>Salary</th>
+            <th>Posted</th>
             <th>Skills</th>
           </tr>
         </thead>
         <tbody id="jobTableBody">
-          <tr><td colspan="4" class="text-center text-muted py-4">Loading…</td></tr>
+          <tr><td colspan="6" class="text-center text-muted py-4">Loading…</td></tr>
         </tbody>
       </table>
     </div>
@@ -394,6 +412,13 @@
   let allJobs = [];
 
   /* ── Helpers ── */
+  function fmtDate(d) {
+    if (!d || String(d).trim() === '') return '<span style="color:var(--muted)">—</span>';
+    const dt = new Date(d);
+    if (isNaN(dt)) return esc(d);
+    return dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
   function esc(s) {
     const d = document.createElement('div');
     d.textContent = String(s ?? '');
@@ -512,15 +537,19 @@
       const pills  = skills
         .map(s => `<span class="skill-pill">${esc(toTitle(s))}</span>`)
         .join('');
-      const more   = '';
       const loc = j.location && j.location.trim()
         ? esc(j.location)
         : '<span style="color:var(--muted);">—</span>';
+      const salary = j.salary && j.salary.trim()
+        ? `<span style="white-space:nowrap">${esc(j.salary)}</span>`
+        : '<span style="color:var(--muted)">—</span>';
       return `<tr>
         <td style="font-weight:500">${esc(j.title)}</td>
         <td>${esc(j.company)}</td>
         <td>${loc}</td>
-        <td>${pills}${more}</td>
+        <td style="font-size:0.82rem">${salary}</td>
+        <td style="font-size:0.82rem;white-space:nowrap">${fmtDate(j.actual_posted_date)}</td>
+        <td>${pills}</td>
       </tr>`;
     }).join('');
   }
@@ -537,6 +566,7 @@
         ? allJobs.filter(j =>
             (j.title   ?? '').toLowerCase().includes(q) ||
             (j.company ?? '').toLowerCase().includes(q) ||
+            (j.salary  ?? '').toLowerCase().includes(q) ||
             (Array.isArray(j.skills) ? j.skills.join(' ') : (j.skills ?? '')).toLowerCase().includes(q) ||
             (j.location ?? '').toLowerCase().includes(q)
           )
@@ -597,12 +627,27 @@
     } catch {
       document.getElementById('errorAlert').style.display = 'flex';
       document.getElementById('jobTableBody').innerHTML =
-        '<tr><td colspan="4" class="text-center text-muted py-4">No data available.</td></tr>';
+        '<tr><td colspan="6" class="text-center text-muted py-4">No data available.</td></tr>';
       /* Zero-out summary cards */
       ['statTotalJobs','statCompanies','statSkills','statTopSkill'].forEach(id => {
         document.getElementById(id).textContent = '—';
       });
+    } finally {
+      const btn  = document.getElementById('refreshBtn');
+      const icon = document.getElementById('refreshIcon');
+      if (btn)  btn.disabled = false;
+      if (icon) { icon.textContent = '↻'; icon.classList.remove('spin'); }
     }
+  }
+
+  function refreshStats() {
+    const btn  = document.getElementById('refreshBtn');
+    const icon = document.getElementById('refreshIcon');
+    btn.disabled  = true;
+    icon.textContent = '↻';
+    icon.classList.add('spin');
+    document.getElementById('errorAlert').style.display = 'none';
+    loadStats();
   }
 
   loadStats();

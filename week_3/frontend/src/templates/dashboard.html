@@ -486,35 +486,29 @@
           <div class="form-group">
             <label class="form-label" for="targetRole">Target Role</label>
             <select class="form-select" id="targetRole" name="target_role" required>
-              <option value="">Select a role…</option>
-              <option>AI Engineer</option>
-              <option>Applied AI Engineer</option>
-              <option>AI Chatbot Developer</option>
-              <option>AI Software Engineer</option>
-              <option>Machine Learning Engineer</option>
-              <option>Computer Vision Engineer</option>
-              <option>Data Scientist</option>
-              <option>Data Engineer</option>
-              <option>Backend Developer</option>
-              <option>Full Stack Developer</option>
-              <option>Software Engineer</option>
-              <option>DevOps / Cloud Engineer</option>
-              <option>Algorithm Engineer</option>
+              <option value="" disabled selected>Loading roles…</option>
             </select>
           </div>
 
           <div class="form-group">
             <label class="form-label" for="location">Location</label>
             <select class="form-select" id="location" name="location" required>
-              <option value="">Select a location…</option>
-              <option>Kuala Lumpur</option>
-              <option>Selangor</option>
-              <option>Cyberjaya, Selangor</option>
-              <option>Petaling Jaya, Selangor</option>
-              <option>Penang</option>
-              <option>Johor Bahru</option>
-              <option>Melaka</option>
-              <option>Remote / Malaysia</option>
+              <option value="" disabled selected>Loading locations…</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="expectedSalary">
+              Expected Salary
+              <span style="color:var(--muted);font-weight:400;">(optional)</span>
+            </label>
+            <select class="form-select" id="expectedSalary" name="expected_salary">
+              <option value="">No preference</option>
+              <option>MYR 3,000 – 5,000</option>
+              <option>MYR 5,000 – 8,000</option>
+              <option>MYR 8,000 – 12,000</option>
+              <option>MYR 12,000 – 15,000</option>
+              <option>MYR 15,000+</option>
             </select>
           </div>
 
@@ -666,7 +660,7 @@
 </main><!-- /.main-wrapper -->
 
 <script type="module">
-  import { analyzeMarket } from '/static/services/api.js';
+  import { analyzeMarket, getRoles, getLocations } from '/static/services/api.js';
 
   // ── DOM refs ────────────────────────────────────────────────
   const form        = document.getElementById('analyzeForm');
@@ -696,6 +690,41 @@
 
   const CIRCUMFERENCE = 2 * Math.PI * 45; // ≈ 283
   let skillsChart = null;
+
+  // ── Populate dropdowns from backend (fallback to preset) ────────────────
+  function fillSelect(selectEl, items, placeholder) {
+    selectEl.innerHTML = '';
+    const blank = document.createElement('option');
+    blank.value    = '';
+    blank.disabled = true;
+    blank.selected = true;
+    blank.textContent = placeholder;
+    selectEl.appendChild(blank);
+    items.forEach(item => {
+      const opt = document.createElement('option');
+      opt.textContent = item;
+      selectEl.appendChild(opt);
+    });
+  }
+
+  async function loadDropdowns() {
+    const [rolesResult, locationsResult] = await Promise.allSettled([
+      getRoles(),
+      getLocations(),
+    ]);
+    fillSelect(
+      roleSelect,
+      rolesResult.status === 'fulfilled' ? rolesResult.value : [],
+      'Select a role\u2026',
+    );
+    fillSelect(
+      locationSelect,
+      locationsResult.status === 'fulfilled' ? locationsResult.value : [],
+      'Select a location\u2026',
+    );
+  }
+
+  loadDropdowns();
 
   // ── PDF upload badge ────────────────────────────────────────
   pdfInput.addEventListener('change', () => {
